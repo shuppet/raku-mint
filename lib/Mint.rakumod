@@ -6,6 +6,13 @@ use Red:api<2>;
 has $.RED-DB = database "Pg", :host<localhost>, :database<mint>, :user<mint>, :password<password>;
 has $.termination-points = set 'system', 'transfer', 'reward', 'penalty';
 
+multi trait_mod:<is>(Method $m, :$red-method) {
+    $m.wrap: my method (|) {
+        my $*RED-DB = $!RED-DB;
+        nextsame;
+    }
+}
+
 model Accounts is table<mint_accounts> is rw {
     has Str $.account is unique;
     has Int $.balance is column;
@@ -29,6 +36,11 @@ model Transactions is table<mint_transactions> is rw {
 submethod TWEAK() {
     Accounts.^create-table: :if-not-exists;
     Transactions.^create-table: :if-not-exists;
+}
+
+method register-account(:$account) is red-method {
+    Accounts.^create: :account($account), :balance<0>;
+    say "✓ Registered a new account for $account";
 }
 
 method register-termination-points(Set $new-termination-points) {
