@@ -1,46 +1,50 @@
 unit class Mint;
 
-use LibUUID;
+use UUID;
 use Red:api<2>;
 
-has $.RED-DB = database "Pg", :host<localhost>, :database<mint>, :user<mint>, :password<password>;
 has $.termination-points = set 'system', 'transfer', 'reward', 'penalty';
 
-multi trait_mod:<is>(Method $m, :$red-method) {
-    $m.wrap: my method (|) {
-        my $*RED-DB = $!RED-DB;
-        nextsame;
-    }
-}
-
-model Accounts is table<mint_accounts> is rw {
-    has Str $.account is unique;
-    has Int $.balance is column;
+model Account is table<mint_accounts> is rw {
+    has Str $.account is id;
+    has @.transactions is relationship( { .account }, :model(Transaction) );
     has Int $.overdraft is column = 0;
+    has Bool $.is-frozen is column = False;
     has DateTime $.last-updated is column{ :type<timestamptz> } = DateTime.now;
+
+    method new() { ... }
+    method rename() { ... }
+    method balance() { ... }
+    method set-overdraft() { ... }
+    method freeze() { ... }
+    method defrost() { ... }
 }
 
-model Transactions is table<mint_transactions> is rw {
-    has UUID $.batch is column;
-    has Str $.account is column;
+model Transaction is table<mint_transactions> is rw {
+    has UUID $.batch is id;
+    has Str $.account is id;
     has Int $.value is column;
-    has Str $.from-account is referencing( *.account, :model(Accounts) );
-    has Accounts $.sender is relationship( *.from-account );
-    has Str $.to-account is referencing( *.account, :model(Accounts) );
-    has Accounts $.recipient is relationship( *.to-account );
+    has Str $.from-account is referencing( *.account, :model(Account) );
+    has Account $.sender is relationship( *.from-account );
+    has Str $.to-account is referencing( *.account, :model(Account) );
+    has Account $.recipient is relationship( *.to-account );
     has Str $.termination-point is column;
     has Bool $.is-void is column = False;
     has DateTime $.datetime is column{ :type<timestamptz> } = DateTime.now;
+
+    method new() { ... }
+    method void() { ... }
 }
 
 submethod TWEAK() {
-    Accounts.^create-table: :if-not-exists;
-    Transactions.^create-table: :if-not-exists;
-}
+    red-defaults "Pg",
+            host => "localhost",
+            database => "mint",
+            user => "mint",
+            password => "password",
+            :default;
 
-method register-account(:$account) is red-method {
-    Accounts.^create: :account($account), :balance<0>;
-    say "✓ Registered a new account for $account";
+    schema(Account, Transaction).create;
 }
 
 method register-termination-points(Set $new-termination-points) {
