@@ -10,17 +10,26 @@ model Transaction { ... }
 
 model Account is table<mint_accounts> is rw {
     has Str $.account is id;
-    has @.transactions is relationship( { .account }, :model(Transaction) );
+    has @.transactions is relationship( *.account, :model(Transaction) );
     has Int $.overdraft is column = 0;
     has Bool $.is-frozen is column = False;
-    has DateTime $.last-updated is column{ :type<timestamptz> } = DateTime.now;
+    has DateTime $.registration-date is column{ :type<timestamptz> } = DateTime.now;
 
-    method new() { ... }
-    method rename() { ... }
+    method new(Str :$account) { self.^create(account => $account); }
+
+    method rename(Str :$account-name, Str :$new-account-name) { 
+        my $a = self.^load($account-name);
+        $a.account = $new-account-name;
+        self.^save;
+    }
+
     method balance() { ... }
-    method set-overdraft() { ... }
-    method freeze() { ... }
-    method defrost() { ... }
+
+    method set-overdraft(Str :$account, Int :$overdraft) { ... }
+
+    method freeze(Str :$account) { ... }
+
+    method defrost(Str :$account) { ... }
 }
 
 model Transaction is table<mint_transactions> is rw {
