@@ -5,6 +5,9 @@ use Red:api<2>;
 
 has $.termination-points = set 'system', 'transfer', 'reward', 'penalty';
 
+model Account { ... }
+model Transaction { ... }
+
 model Account is table<mint_accounts> is rw {
     has Str $.account is id;
     has @.transactions is relationship( { .account }, :model(Transaction) );
