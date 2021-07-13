@@ -14,30 +14,6 @@ model Account is table<mint_accounts> is rw is export {
     has Int $.overdraft is column = 0;
     has Bool $.is-frozen is column = False;
     has DateTime $.registration-date is column{ :type<timestamptz> } = DateTime.now;
-
-    method new(Str $account) {
-        self.^create(account => $account);
-        say "✓ new account created for $account";
-    }
-
-    method mint(Str :$account, Int :$value) {
-        my $termination-point = 'system';
-        Transaction.new(:$account, :$value, :$termination-point);
-    }
-
-    method rename(Str :$account-name, Str :$new-account-name) { 
-        my $a = self.^load($account-name);
-        $a.account = $new-account-name;
-        self.^save;
-    }
-
-    method balance() { ... }
-
-    method set-overdraft(Str :$account, Int :$overdraft) { ... }
-
-    method freeze(Str :$account) { ... }
-
-    method defrost(Str :$account) { ... }
 }
 
 model Transaction is table<mint_transactions> is nullable is rw {
@@ -52,11 +28,27 @@ model Transaction is table<mint_transactions> is nullable is rw {
     has Bool $.is-void is column = False;
     has DateTime $.datetime is column{ :type<timestamptz> } = DateTime.now;
 
-    method new(Str :$account, Int :$value, Str :$from-account?, Str :$to-account?, Str :$termination-point) {
-        self.^create(batch => ~UUID.new, account => $account, value => $value, termination-point => $termination-point);
-    }
+}
 
-    method void() { ... }
+method create-account(Str $account-name) {
+    if !Account.^load($account-name) {
+        Account.^create(:account($account-name));
+        say "✓ new account created for $account-name";
+     } else {
+        say "✗ account '$account-name' already exists";
+    }
+}
+
+method balance(:$account) {
+    red-do { .execute: 'SELECT * FROM ...' }
+}
+
+multi method new-transaction(Str :$account, Int :$value, Str :$termination-point) {
+    Transaction.^create(batch => ~UUID.new, :$account, :$value, to-account => $account, :$termination-point);
+}
+
+multi method new-transaction(Str :$account, Int :$value, Str :$from-account, Str :$to-account, Str :$termination-point) {
+    Transaction.^create(batch => ~UUID.new, :$account, :$value, :$from-account, $to-account, :$termination-point);
 }
 
 submethod TWEAK() {
@@ -67,7 +59,7 @@ submethod TWEAK() {
             password => "password",
             :default;
 
-    schema(Account, Transaction).create;
+    #schema(Account, Transaction).create;
 }
 
 method register-termination-points(Set $new-termination-points) {
