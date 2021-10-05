@@ -6,6 +6,8 @@ my $m = Mint.new();
 my $name = 'kawaii';
 $m.create-account($name);
 
-$m.new-transaction(:account($name), :value(35), :termination-point('system'));
+$m.mint(:account($name), :value(35));
+
+say $m.balance(:account($name));
 
 done-testing;

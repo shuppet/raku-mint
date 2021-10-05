@@ -16,18 +16,16 @@ model Account is table<mint_accounts> is rw is export {
     has DateTime $.registration-date is column{ :type<timestamptz> } = DateTime.now;
 }
 
-model Transaction is table<mint_transactions> is nullable is rw {
+model Transaction is table<mint_transactions> is rw {
     has UUID $.batch is id;
-    has Str $.account is id;
     has Int $.value is column;
-    has Str $.from-account is referencing( *.account, :model(Account) );
+    has Str $.from-account is referencing( *.account, :model(Account) ) is id;
     has Account $.sender is relationship(*.from-account);
-    has Str $.to-account is referencing( *.account, :model(Account) );
+    has Str $.to-account is referencing( *.account, :model(Account) ) is id;
     has Account $.recipient is relationship(*.to-account);
     has Str $.termination-point is column;
     has Bool $.is-void is column = False;
     has DateTime $.datetime is column{ :type<timestamptz> } = DateTime.now;
-
 }
 
 method create-account(Str $account-name) {
@@ -40,15 +38,16 @@ method create-account(Str $account-name) {
 }
 
 method balance(:$account) {
-    red-do { .execute: 'SELECT * FROM ...' }
+    my %balance = red-do { .execute("select coalesce(sum(tin.value),0) - coalesce(sum(tout.value),0) as balance from mint_accounts a left join mint_transactions tin on tin.to_account = a.account and not tin.is_void left join mint_transactions tout on tout.from_account = a.account and not tout.is_void where a.account = '$account';").row }
+    return %balance<balance>:v;
 }
 
-multi method new-transaction(Str :$account, Int :$value, Str :$termination-point) {
-    Transaction.^create(batch => ~UUID.new, :$account, :$value, to-account => $account, :$termination-point);
+method mint(Str :$account, Int :$value) {
+    Transaction.^create(batch => ~UUID.new, :$value, from-account => 'mint', to-account => $account, termination-point => 'system');
 }
 
-multi method new-transaction(Str :$account, Int :$value, Str :$from-account, Str :$to-account, Str :$termination-point) {
-    Transaction.^create(batch => ~UUID.new, :$account, :$value, :$from-account, $to-account, :$termination-point);
+method new-transaction(Int :$value, Str :$from-account, Str :$to-account) {
+    Transaction.^create(batch => ~UUID.new, :$value, :$from-account, :$to-account, termination-point => 'transfer');
 }
 
 submethod TWEAK() {
