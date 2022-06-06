@@ -1,6 +1,6 @@
 unit class Mint;
 
-use UUID;
+use LibUUID;
 use Red:api<2>;
 
 has $.termination-points = set 'system', 'transfer', 'reward', 'penalty';
@@ -38,12 +38,28 @@ method create-account(Str $account-name) {
 }
 
 method balance(:$account) {
-    my %balance = red-do { .execute("select coalesce(sum(tin.value),0) - coalesce(sum(tout.value),0) as balance from mint_accounts a left join mint_transactions tin on tin.to_account = a.account and not tin.is_void left join mint_transactions tout on tout.from_account = a.account and not tout.is_void where a.account = '$account';").row }
+    my %balance = red-do { .execute(
+        qq:to/SQL/
+            select coalesce(sum(tin.value),0) - coalesce(sum(tout.value),0) as balance
+            from mint_accounts a
+            left join mint_transactions tin
+              on tin.to_account = a.account and not tin.is_void
+            left join mint_transactions tout
+              on tout.from_account = a.account and not tout.is_void
+            where a.account = '$account';
+        SQL
+    ).row }
     return %balance<balance>:v;
 }
 
 method mint(Str :$account, Int :$value) {
-    Transaction.^create(batch => ~UUID.new, :$value, from-account => 'mint', to-account => $account, termination-point => 'system');
+    Transaction.^create(batch => UUID.new, :$value, from-account => 'mint', to-account => $account, termination-point => 'system');
+    say "✓ minted $value tokens for account: $account";
+}
+
+method burn(Str :$account, Int :$value) {
+    Transaction.^create(batch => UUID.new, :$value, from-account => $account, to-account => 'burn', termination-point => 'system');
+    say "✓ burned $value tokens for account: $account";
 }
 
 method new-transaction(Int :$value, Str :$from-account, Str :$to-account) {
