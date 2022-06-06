@@ -6,9 +6,12 @@ my $m = Mint.new();
 my $name = 'kawaii';
 $m.create-account($name);
 
-$m.mint(:account($name), :value(35));
-$m.burn(:account($name), :value(100));
+#$m.mint(:account($name), :value(400));
+#$m.burn(:account($name), :value(20));
 
-say $m.balance(:account($name));
+my $account = Account.^load(:account($name));
+
+say $account.balance;
+say $account.available-balance;
 
 done-testing;

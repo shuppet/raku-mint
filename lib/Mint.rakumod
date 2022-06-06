@@ -14,10 +14,28 @@ model Account is table<mint_accounts> is rw is export {
     has Int $.overdraft is column = 0;
     has Bool $.is-frozen is column = False;
     has DateTime $.registration-date is column{ :type<timestamptz> } = DateTime.now;
+
+    method balance() {
+        my %balance = red-do { .execute(
+            qq:to/SQL/
+              select i.value - o.value as balance from mint_accounts a
+                left join ( select to_account, sum(value) as value from mint_transactions where not is_void group by to_account )
+                  i on i.to_account = a.account
+                left join ( select from_account, sum(value) as value from mint_transactions where not is_void group by from_account )
+                  o on o.from_account = a.account
+              where a.account = '$!account';
+            SQL
+        ).row }
+        return %balance<balance>:v;
+    }
+
+    method available-balance() {
+        return self.balance + self.overdraft;
+    }
 }
 
 model Transaction is table<mint_transactions> is rw {
-    has UUID $.batch is id;
+    has UUID $.batch is column;
     has Int $.value is column;
     has Str $.from-account is referencing( *.account, :model(Account) ) is id;
     has Account $.sender is relationship(*.from-account);
@@ -37,19 +55,10 @@ method create-account(Str $account-name) {
     }
 }
 
-method balance(:$account) {
-    my %balance = red-do { .execute(
-        qq:to/SQL/
-            select coalesce(sum(tin.value),0) - coalesce(sum(tout.value),0) as balance
-            from mint_accounts a
-            left join mint_transactions tin
-              on tin.to_account = a.account and not tin.is_void
-            left join mint_transactions tout
-              on tout.from_account = a.account and not tout.is_void
-            where a.account = '$account';
-        SQL
-    ).row }
-    return %balance<balance>:v;
+method available-balance(:$account) {
+    my $overdraft = Account.^load(:account-name($account)).overdraft;
+    my $available-balance = Account.^load(:account-name($account)).balance + $overdraft;
+    return $available-balance;
 }
 
 method mint(Str :$account, Int :$value) {
@@ -62,9 +71,7 @@ method burn(Str :$account, Int :$value) {
     say "✓ burned $value tokens for account: $account";
 }
 
-method new-transaction(Int :$value, Str :$from-account, Str :$to-account) {
-    Transaction.^create(batch => ~UUID.new, :$value, :$from-account, :$to-account, termination-point => 'transfer');
-}
+method new-transaction(Int :$value, Str :$from-account, Str :$to-account) { ... }
 
 submethod TWEAK() {
     red-defaults "Pg",
