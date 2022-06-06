@@ -55,12 +55,6 @@ method create-account(Str $account-name) {
     }
 }
 
-method available-balance(:$account) {
-    my $overdraft = Account.^load(:account-name($account)).overdraft;
-    my $available-balance = Account.^load(:account-name($account)).balance + $overdraft;
-    return $available-balance;
-}
-
 method mint(Str :$account, Int :$value) {
     Transaction.^create(batch => UUID.new, :$value, from-account => 'mint', to-account => $account, termination-point => 'system');
     say "✓ minted $value tokens for account: $account";
