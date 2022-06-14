@@ -27,10 +27,15 @@ model Account is table<mint_accounts> is rw is export {
         }
     }
 
-    method burn(UInt $value) {
+    method burn(UInt $value, Bool $bypass-overdraft = False) {
         if !self.is-frozen {
-            Transaction.^create(batch => UUID.new, :$value, from-account => self.account, to-account => 'burn', termination-point => 'system');
-            say "✓ minted $value tokens for account: $!account";
+            my $anticipated-balance = self.available-balance - $value;
+            if $anticipated-balance > self.available-balance and $bypass-overdraft == False {
+                class X::Mint::Account::InsufficientBalance.new().thow;
+            } else {
+                Transaction.^create(batch => UUID.new, :$value, from-account => self.account, to-account => 'burn', termination-point => 'system');
+                say "✓ burned $value tokens for account: $!account";
+            }
         } else {
             X::Mint::Account::IsFrozen.new(:$!account).throw;
             CATCH { when X::Mint::Account::IsFrozen { say("✗ account '$!account' is frozen and thus immutable") } }
@@ -54,11 +59,25 @@ model Account is table<mint_accounts> is rw is export {
     method available-balance() {
         return self.balance + self.overdraft;
     }
+
+    method set-overdraft(UInt $value) {
+        $!overdraft = $value; self.^save;
+        say "✓ account '$!account' overdraft successfully set to $value";
+    }
+
+    method freeze {
+        $!is-frozen = True; self.^save;
+        say "✓ account '$!account' was successfully frozen";
+    }
+
+    method thaw {
+        $!is-frozen = False; self.^save;
+        say "✓ account '$!account' was successfully thawed";
+    }
 }
 
 model Transaction is table<mint_transactions> is rw {
-    has Int $.id is serial;
-    has UUID $.batch is column;
+    has UUID $.batch is id;
     has UInt $.value is column;
     has Str $.from-account is referencing( *.account, :model(Account) ) is id;
     has Account $.sender is relationship(*.from-account);
