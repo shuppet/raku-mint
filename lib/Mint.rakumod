@@ -1,5 +1,7 @@
 unit class Mint;
 
+use Mint::Exception;
+
 use LibUUID;
 use Red:api<2>;
 
@@ -14,6 +16,26 @@ model Account is table<mint_accounts> is rw is export {
     has Int $.overdraft is column = 0;
     has Bool $.is-frozen is column = False;
     has DateTime $.registration-date is column{ :type<timestamptz> } = DateTime.now;
+
+    method mint(UInt $value) {
+        if !self.is-frozen {
+            Transaction.^create(batch => UUID.new, :$value, from-account => 'mint', to-account => self.account, termination-point => 'system');
+            say "✓ minted $value tokens for account: $!account";
+        } else {
+            X::Mint::Account::IsFrozen.new(:$!account).throw;
+            CATCH { when X::Mint::Account::IsFrozen { say("✗ account '$!account' is frozen and thus immutable") } }
+        }
+    }
+
+    method burn(UInt $value) {
+        if !self.is-frozen {
+            Transaction.^create(batch => UUID.new, :$value, from-account => self.account, to-account => 'burn', termination-point => 'system');
+            say "✓ minted $value tokens for account: $!account";
+        } else {
+            X::Mint::Account::IsFrozen.new(:$!account).throw;
+            CATCH { when X::Mint::Account::IsFrozen { say("✗ account '$!account' is frozen and thus immutable") } }
+        }
+    }
 
     method balance() {
         my %balance = red-do { .execute(
@@ -35,8 +57,9 @@ model Account is table<mint_accounts> is rw is export {
 }
 
 model Transaction is table<mint_transactions> is rw {
+    has Int $.id is serial;
     has UUID $.batch is column;
-    has Int $.value is column;
+    has UInt $.value is column;
     has Str $.from-account is referencing( *.account, :model(Account) ) is id;
     has Account $.sender is relationship(*.from-account);
     has Str $.to-account is referencing( *.account, :model(Account) ) is id;
@@ -46,26 +69,17 @@ model Transaction is table<mint_transactions> is rw {
     has DateTime $.datetime is column{ :type<timestamptz> } = DateTime.now;
 }
 
-method create-account(Str $account-name) {
-    if !Account.^load($account-name) {
-        Account.^create(:account($account-name));
-        say "✓ new account created for $account-name";
+method create-account(Str $account) {
+    if !Account.^load($account) {
+        Account.^create(:$account);
+        say "✓ new account created for $account";
      } else {
-        say "✗ account '$account-name' already exists";
+        X::Mint::Account::AlreadyExists.new(:$account).throw;
+        CATCH { when X::Mint::Account::AlreadyExists { say("✗ account '$account' already exists") } }
     }
 }
 
-method mint(Str :$account, Int :$value) {
-    Transaction.^create(batch => UUID.new, :$value, from-account => 'mint', to-account => $account, termination-point => 'system');
-    say "✓ minted $value tokens for account: $account";
-}
-
-method burn(Str :$account, Int :$value) {
-    Transaction.^create(batch => UUID.new, :$value, from-account => $account, to-account => 'burn', termination-point => 'system');
-    say "✓ burned $value tokens for account: $account";
-}
-
-method new-transaction(Int :$value, Str :$from-account, Str :$to-account) { ... }
+method new-transaction(UInt :$value, Str :$from-account, Str :$to-account) { ... }
 
 submethod TWEAK() {
     red-defaults "Pg",
