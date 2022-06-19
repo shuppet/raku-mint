@@ -1,6 +1,7 @@
 unit class Mint;
 
-use Mint::Exception;
+use X::Mint::Account::IsFrozen;
+use X::Mint::Account::AlreadyExists;
 
 use LibUUID;
 use Red:api<2>;
