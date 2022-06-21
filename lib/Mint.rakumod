@@ -31,14 +31,15 @@ model Account is table<mint_accounts> is rw is export {
         if !self.is-frozen {
             my $anticipated-balance = self.available-balance - $value;
             if $anticipated-balance > self.available-balance and $bypass-overdraft == False {
-                class X::Mint::Account::InsufficientBalance.new().throw;
+                X::Mint::Account::InsufficientBalance.new($!account).throw;
+                CATCH { when X::Mint::Account::InsufficientBalance { note("✗ account '$!account' has insufficient Tokens to fund the transaction.") } }
             } else {
                 Transaction.^create(batch => UUID.new, :$value, from-account => self.account, to-account => 'burn', termination-point => 'system');
                 say "✓ burned $value tokens for account: $!account";
             }
         } else {
             X::Mint::Account::IsFrozen.new(:$!account).throw;
-            CATCH { when X::Mint::Account::IsFrozen { say("✗ account '$!account' is frozen and thus immutable") } }
+            CATCH { when X::Mint::Account::IsFrozen { note("✗ account '$!account' is frozen and thus immutable") } }
         }
     }
 
@@ -94,7 +95,7 @@ method create-account(Str $account) {
         say "✓ new account created for $account";
      } else {
         X::Mint::Account::AlreadyExists.new(:$account).throw;
-        CATCH { when X::Mint::Account::AlreadyExists { say("✗ account '$account' already exists") } }
+        CATCH { when X::Mint::Account::AlreadyExists { note("✗ account '$account' already exists") } }
     }
 }
 
@@ -108,7 +109,7 @@ submethod TWEAK() {
             password => "password",
             :default;
 
-    #schema(Account, Transaction).create;
+    schema(Account, Transaction).create;
 }
 
 method register-termination-points(Set $new-termination-points) {
