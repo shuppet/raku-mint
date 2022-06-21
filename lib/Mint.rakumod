@@ -31,7 +31,7 @@ model Account is table<mint_accounts> is rw is export {
         if !self.is-frozen {
             my $anticipated-balance = self.available-balance - $value;
             if $anticipated-balance > self.available-balance and $bypass-overdraft == False {
-                class X::Mint::Account::InsufficientBalance.new().thow;
+                class X::Mint::Account::InsufficientBalance.new().throw;
             } else {
                 Transaction.^create(batch => UUID.new, :$value, from-account => self.account, to-account => 'burn', termination-point => 'system');
                 say "✓ burned $value tokens for account: $!account";
